@@ -1160,16 +1160,6 @@ function App() {
                               {part.text}
                             </ReactMarkdown>
                           )}
-                          {part.type === 'image' && (
-                            <div className="my-2 rounded-lg overflow-hidden border border-border/50 bg-secondary/20">
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img 
-                                src={part.image instanceof URL ? part.image.toString() : part.image} 
-                                alt="Załącznik" 
-                                className="max-w-full h-auto object-contain max-h-[400px]" 
-                              />
-                            </div>
-                          )}
                         </div>
                       ))
                     ) : (
