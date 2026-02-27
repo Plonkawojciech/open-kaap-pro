@@ -948,6 +948,7 @@ function App() {
          syncActiveChatMessages(finalMessages);
        } else {
         const messagePayload: ChatMessageWithAttachments = {
+          id: createId(),
           role: 'user',
           parts: [{ type: 'text', text: fullText }],
           experimental_attachments: imageAttachments,
