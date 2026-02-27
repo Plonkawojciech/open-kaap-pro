@@ -7,6 +7,14 @@ import type { ChatMessage } from '@/lib/chat-types';
 
 export const maxDuration = 30;
 
+class HttpError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
+
 type GoogleModelsCache = {
   apiKey: string;
   expiresAt: number;
@@ -142,7 +150,7 @@ async function resolveProviderModel({
   if (provider === 'openai') {
     const openAiKey = apiKeys?.openai || process.env.OPENAI_API_KEY;
     if (!openAiKey) {
-      throw new Error('Brak klucza OPENAI_API_KEY w pliku .env');
+      throw new HttpError(401, 'Brak klucza OPENAI_API_KEY w pliku .env');
     }
     const openaiProvider = createOpenAI({ apiKey: openAiKey });
     return { provider, model: openaiProvider(providerModelId) };
@@ -151,11 +159,11 @@ async function resolveProviderModel({
   if (provider === 'google') {
     const googleKey = apiKeys?.google || process.env.GOOGLE_API_KEY || process.env.GOOGLE_AI_STUDIO_API_KEY;
     if (!googleKey) {
-      throw new Error('Brak klucza GOOGLE_API_KEY (lub GOOGLE_AI_STUDIO_API_KEY) w pliku .env');
+      throw new HttpError(401, 'Brak klucza GOOGLE_API_KEY (lub GOOGLE_AI_STUDIO_API_KEY) w pliku .env');
     }
     const availableModels = await getGoogleModels(googleKey);
     if (availableModels.length > 0 && !availableModels.includes(modelId)) {
-      throw new Error(`Model "${modelId}" nie jest dostępny dla tego klucza.`);
+      throw new HttpError(400, `Model "${modelId}" nie jest dostępny dla tego klucza.`);
     }
     const googleProvider = createGoogleGenerativeAI({ apiKey: googleKey });
     return { provider, model: googleProvider(providerModelId) };
@@ -164,7 +172,7 @@ async function resolveProviderModel({
   if (provider === 'deepseek') {
     const deepseekKey = apiKeys?.deepseek || process.env.DEEPSEEK_API_KEY;
     if (!deepseekKey) {
-      throw new Error('Brak klucza DEEPSEEK_API_KEY w pliku .env');
+      throw new HttpError(401, 'Brak klucza DEEPSEEK_API_KEY w pliku .env');
     }
     const deepseekProvider = createOpenAI({ apiKey: deepseekKey, baseURL: 'https://api.deepseek.com' });
     return { provider, model: deepseekProvider(providerModelId) };
@@ -172,7 +180,7 @@ async function resolveProviderModel({
 
   const anthropicKey = apiKeys?.anthropic || process.env.ANTHROPIC_API_KEY;
   if (!anthropicKey) {
-    throw new Error('Brak klucza ANTHROPIC_API_KEY w pliku .env');
+    throw new HttpError(401, 'Brak klucza ANTHROPIC_API_KEY w pliku .env');
   }
   const anthropicProvider = createAnthropic({ apiKey: anthropicKey });
   return { provider: 'anthropic', model: anthropicProvider(providerModelId) };
@@ -350,6 +358,13 @@ export async function POST(req: Request) {
       }
     }
 
+    if (lastError instanceof HttpError) {
+      return new Response(JSON.stringify({ error: lastError.message, details: lastError.message }), {
+        status: lastError.status,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
     return new Response(
       JSON.stringify({
         error: 'Nie udało się wygenerować odpowiedzi.',
@@ -358,6 +373,12 @@ export async function POST(req: Request) {
       { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
   } catch (error) {
+    if (error instanceof HttpError) {
+      return new Response(JSON.stringify({ error: error.message, details: error.message }), {
+        status: error.status,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
     return new Response(JSON.stringify({ error: 'Internal Server Error', details: error instanceof Error ? error.message : String(error) }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },

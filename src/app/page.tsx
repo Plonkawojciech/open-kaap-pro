@@ -109,7 +109,7 @@ function App() {
   const lastFilesRef = useRef<AttachedFile[]>([]);
 
   const chatTransport = useMemo(() => new DefaultChatTransport({ api: '/api/chat' }), []);
-  const { resolvedTheme, setTheme } = useTheme();
+  const { resolvedTheme, theme, setTheme } = useTheme();
 
   // -- State --
   // UI State
@@ -932,7 +932,11 @@ function App() {
              apiKeys,
            }),
          });
-         const json = await res.json();
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          const details = typeof json.details === 'string' ? json.details : typeof json.error === 'string' ? json.error : 'Wystąpił błąd serwera.';
+          throw new Error(details);
+        }
          const results = Array.isArray(json.results) ? json.results : [];
          const mergedText = json.mergedText ? String(json.mergedText) : '';
          const responseText = [
@@ -1097,7 +1101,11 @@ function App() {
             apiKeys,
           }),
         });
-        const json = await res.json();
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          const details = typeof json.details === 'string' ? json.details : typeof json.error === 'string' ? json.error : 'Wystąpił błąd serwera.';
+          throw new Error(details);
+        }
         const results = Array.isArray(json.results) ? json.results : [];
         const mergedText = json.mergedText ? String(json.mergedText) : '';
         const responseText = [
@@ -1185,7 +1193,9 @@ function App() {
 
   const isLoading = status === 'streaming' || status === 'submitted';
   const lastPromptCostPLN = lastUsage.costUSD * USD_TO_PLN;
-  const isDark = resolvedTheme === 'dark';
+  const currentTheme = theme === 'system' ? resolvedTheme : theme;
+  const nextTheme = currentTheme === 'light' ? 'dim' : currentTheme === 'dim' ? 'dark' : 'light';
+  const nextThemeLabel = nextTheme === 'dim' ? 'Tryb wieczorny' : nextTheme === 'dark' ? 'Tryb ciemny' : 'Tryb jasny';
 
   // -- Render --
 
@@ -1250,14 +1260,20 @@ function App() {
         <div className="flex items-center gap-1">
           <div className="relative group">
             <button 
-              onClick={() => setTheme(isDark ? 'light' : 'dark')}
+              onClick={() => setTheme(nextTheme)}
               className="p-2 hover:bg-secondary rounded-full transition-colors"
-              aria-label={isDark ? "Tryb jasny" : "Tryb ciemny"}
+              aria-label={nextThemeLabel}
             >
-              {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+              {nextTheme === 'light' ? (
+                <Sun className="w-5 h-5" />
+              ) : nextTheme === 'dark' ? (
+                <Moon className="w-5 h-5" />
+              ) : (
+                <Moon className="w-5 h-5 opacity-70" />
+              )}
             </button>
             <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1 px-2 py-0.5 text-[10px] rounded bg-background border border-border/50 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
-              {isDark ? "Tryb jasny" : "Tryb ciemny"}
+              {nextThemeLabel}
             </span>
           </div>
           <div className="relative group">
