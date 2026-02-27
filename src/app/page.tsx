@@ -66,6 +66,7 @@ import {
 } from '@/lib/chat-storage';
 
 export default dynamic(() => Promise.resolve(App), { ssr: false });
+
 // --- Types ---
 
 type CodeProps = HTMLAttributes<HTMLElement> & {
@@ -84,11 +85,14 @@ type AttachedFile = {
   included: boolean;
 };
 
-type FileAttachmentPart = {
-  type: 'file';
-  mediaType: string;
+type AttachmentPayload = {
+  name: string;
+  contentType: string;
   url: string;
-  filename?: string;
+};
+
+type ChatMessageWithAttachments = ChatMessage & {
+  experimental_attachments?: AttachmentPayload[];
 };
 
 
@@ -203,7 +207,6 @@ function App() {
   const [monthlyModelUsage, setMonthlyModelUsage] = useState<Record<string, UsageTotals>>(() => readMonthlyModelUsage(getMonthKey()));
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
   const [localInput, setLocalInput] = useState('');
-  const [isNewChatOpening, setIsNewChatOpening] = useState(false);
 
   // -- Derived --
   const activeChat = chats.find((chat) => chat.id === activeChatId) ?? null;
@@ -620,8 +623,6 @@ function App() {
     setLocalInput('');
     setAttachedFiles([]);
     setIsSidebarOpen(false); // Close sidebar on mobile
-    setIsNewChatOpening(true);
-    setTimeout(() => setIsNewChatOpening(false), 700);
   };
 
   const selectChat = (chatId: string) => {
@@ -843,12 +844,11 @@ function App() {
         fullText = ' '; // Space to satisfy required content
      }
      
-    const imageParts: FileAttachmentPart[] = imageFiles.map((file) => ({
-      type: 'file',
-      mediaType: file.mimeType || 'image/jpeg',
-      url: file.content,
-      filename: file.name,
-    }));
+     const imageAttachments = imageFiles.map(f => ({
+        name: f.name,
+        contentType: f.mimeType || 'image/jpeg',
+        url: f.content
+     }));
     
      lastUserMessageRef.current = fullText;
     setAttachedFiles([]);
@@ -904,7 +904,7 @@ function App() {
            role: 'user',
            parts: [
              { type: 'text', text: fullText },
-             ...imageParts
+             ...imageAttachments.map(img => ({ type: 'image' as const, image: img.url, mimeType: img.contentType }))
            ],
          };
          const nextMessages = [...messages, userMessage];
@@ -950,10 +950,10 @@ function App() {
          setMessages(finalMessages);
          syncActiveChatMessages(finalMessages);
        } else {
-        const messagePayload: ChatMessage = {
-          id: createId(),
+        const messagePayload: ChatMessageWithAttachments = {
           role: 'user',
-          parts: [{ type: 'text', text: fullText }, ...imageParts],
+          content: fullText,
+          experimental_attachments: imageAttachments,
         };
         await sendMessage(messagePayload, {
           body: {
@@ -1024,18 +1024,12 @@ function App() {
       {/* --- Mobile Header --- */}
       <header className="flex items-center justify-between px-4 py-3 border-b border-border/40 bg-background/80 backdrop-blur-md sticky top-0 z-40 shrink-0">
         <div className="flex items-center gap-3">
-          <div className="relative group">
-            <button 
-              onClick={() => setIsSidebarOpen(true)}
-              className="p-2 -ml-2 hover:bg-secondary rounded-full transition-colors"
-              title="Twoje czaty"
-            >
-              <Menu className="w-5 h-5" />
-            </button>
-            <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1 px-2 py-0.5 text-[10px] rounded bg-background border border-border/50 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
-              Twoje czaty
-            </span>
-          </div>
+          <button 
+            onClick={() => setIsSidebarOpen(true)}
+            className="p-2 -ml-2 hover:bg-secondary rounded-full transition-colors"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
           <div className="flex flex-col">
             <div className="flex items-center gap-2">
               <h1 className="text-sm font-bold leading-tight">Open Kaap Pro</h1>
@@ -1058,42 +1052,32 @@ function App() {
         </div>
         
         <div className="flex items-center gap-1">
-          <div className="relative group">
-            <button 
-              onClick={() => setIsSearchVisible(!isSearchVisible)}
-              className={cn("p-2 rounded-full transition-colors", isSearchVisible ? "bg-secondary" : "hover:bg-secondary")}
-              title="Szukaj w czacie"
-            >
-              <Search className="w-5 h-5" />
-            </button>
-            <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1 px-2 py-0.5 text-[10px] rounded bg-background border border-border/50 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
-              Szukaj w czacie
-            </span>
-          </div>
-          <div className="relative group">
-            <button 
-              onClick={() => setIsSettingsOpen(true)}
-              className="p-2 hover:bg-secondary rounded-full transition-colors"
-              title="Ustawienia"
-            >
-              <Settings className="w-5 h-5" />
-            </button>
-            <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1 px-2 py-0.5 text-[10px] rounded bg-background border border-border/50 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
-              Ustawienia
-            </span>
-          </div>
-          <div className="relative group">
-            <button 
-              onClick={() => createChat()}
-              className="p-2 hover:bg-secondary rounded-full transition-colors text-primary"
-              title="Nowy chat"
-            >
-              <Plus className="w-5 h-5" />
-            </button>
-            <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1 px-2 py-0.5 text-[10px] rounded bg-background border border-border/50 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
-              Nowy chat
-            </span>
-          </div>
+          <button 
+            onClick={() => setIsSearchVisible(!isSearchVisible)}
+            className={cn("p-2 rounded-full transition-colors", isSearchVisible ? "bg-secondary" : "hover:bg-secondary")}
+            title="Szukaj"
+          >
+            <Search className="w-5 h-5" />
+          </button>
+          <button 
+            onClick={() => setIsSettingsOpen(true)}
+            className="p-2 hover:bg-secondary rounded-full transition-colors"
+            title="Edytuj Prompt / Ustawienia"
+          >
+            <Edit2 className="w-5 h-5" />
+          </button>
+          <button 
+            onClick={() => setIsSettingsOpen(true)}
+            className="p-2 hover:bg-secondary rounded-full transition-colors"
+          >
+            <Settings className="w-5 h-5" />
+          </button>
+          <button 
+            onClick={() => createChat()}
+            className="p-2 hover:bg-secondary rounded-full transition-colors text-primary"
+          >
+            <Plus className="w-5 h-5" />
+          </button>
         </div>
       </header>
 
@@ -1108,7 +1092,7 @@ function App() {
       {/* --- Chat Area --- */}
       <main 
         ref={messagesContainerRef}
-        className={cn("flex-1 overflow-y-auto p-4 space-y-6 scroll-smooth", isNewChatOpening && "animate-in slide-in-from-right-4 fade-in duration-300")}
+        className="flex-1 overflow-y-auto p-4 space-y-6 scroll-smooth"
         onScroll={() => {
           const container = messagesContainerRef.current;
           if (!container) return;
@@ -1118,13 +1102,6 @@ function App() {
           isUserScrollingRef.current = !isNearBottom;
         }}
       >
-        {isNewChatOpening && (
-          <div className="flex justify-center">
-            <div className="px-3 py-1 text-xs rounded-full bg-primary text-primary-foreground shadow-sm animate-in fade-in slide-in-from-top-2">
-              Nowy chat
-            </div>
-          </div>
-        )}
         {visibleMessages.length === 0 ? (
           <ChatEmptyState />
         ) : (
@@ -1185,12 +1162,12 @@ function App() {
                               {part.text}
                             </ReactMarkdown>
                           )}
-                          {part.type === 'file' && part.mediaType.startsWith('image/') && (
+                          {part.type === 'image' && (
                             <div className="my-2 rounded-lg overflow-hidden border border-border/50 bg-secondary/20">
                               {/* eslint-disable-next-line @next/next/no-img-element */}
                               <img 
-                                src={part.url} 
-                                alt={part.filename || 'Załącznik'} 
+                                src={part.image instanceof URL ? part.image.toString() : part.image} 
+                                alt="Załącznik" 
                                 className="max-w-full h-auto object-contain max-h-[400px]" 
                               />
                             </div>
