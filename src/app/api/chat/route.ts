@@ -1,4 +1,7 @@
 import { convertToModelMessages, streamText, generateText } from 'ai';
+import { createOpenAI } from '@ai-sdk/openai';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { createAnthropic } from '@ai-sdk/anthropic';
 import { AVAILABLE_MODELS, DEFAULT_MODEL } from '@/lib/constants';
 import type { ChatMessage } from '@/lib/chat-types';
 
@@ -141,7 +144,6 @@ async function resolveProviderModel({
     if (!openAiKey) {
       throw new Error('Brak klucza OPENAI_API_KEY w pliku .env');
     }
-    const { createOpenAI } = await import('@ai-sdk/openai');
     const openaiProvider = createOpenAI({ apiKey: openAiKey });
     return { provider, model: openaiProvider(providerModelId) };
   }
@@ -155,7 +157,6 @@ async function resolveProviderModel({
     if (availableModels.length > 0 && !availableModels.includes(modelId)) {
       throw new Error(`Model "${modelId}" nie jest dostępny dla tego klucza.`);
     }
-    const { createGoogleGenerativeAI } = await import('@ai-sdk/google');
     const googleProvider = createGoogleGenerativeAI({ apiKey: googleKey });
     return { provider, model: googleProvider(providerModelId) };
   }
@@ -165,7 +166,6 @@ async function resolveProviderModel({
     if (!deepseekKey) {
       throw new Error('Brak klucza DEEPSEEK_API_KEY w pliku .env');
     }
-    const { createOpenAI } = await import('@ai-sdk/openai');
     const deepseekProvider = createOpenAI({ apiKey: deepseekKey, baseURL: 'https://api.deepseek.com' });
     return { provider, model: deepseekProvider(providerModelId) };
   }
@@ -174,7 +174,6 @@ async function resolveProviderModel({
   if (!anthropicKey) {
     throw new Error('Brak klucza ANTHROPIC_API_KEY w pliku .env');
   }
-  const { createAnthropic } = await import('@ai-sdk/anthropic');
   const anthropicProvider = createAnthropic({ apiKey: anthropicKey });
   return { provider: 'anthropic', model: anthropicProvider(providerModelId) };
 }
@@ -224,7 +223,6 @@ export async function POST(req: Request) {
     if (action === 'test') {
       const { model: providerModel } = await resolveProviderModel({ modelId: selectedModel, apiKeys });
       const modelConfig = AVAILABLE_MODELS.find(m => m.id === selectedModel);
-      const maxOutputTokens = modelConfig?.maxOutputTokens;
       const systemInstruction = buildSystemInstruction({
         modelId: selectedModel,
         masterPrompt,
@@ -238,7 +236,7 @@ export async function POST(req: Request) {
         prompt: 'ping',
         system: systemInstruction,
         temperature: 0,
-        maxOutputTokens,
+        maxOutputTokens: modelConfig?.maxOutputTokens,
       });
       return Response.json({ ok: true, model: selectedModel, text: result.text });
     }

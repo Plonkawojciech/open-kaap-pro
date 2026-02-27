@@ -10,7 +10,7 @@ export function getMessageText(message: ChatMessage) {
       .join('');
     if (text) return text;
   }
-  return '';
+  return message.content || '';
 }
 
 export function createId() {

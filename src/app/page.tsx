@@ -66,6 +66,7 @@ import {
 } from '@/lib/chat-storage';
 
 export default dynamic(() => Promise.resolve(App), { ssr: false });
+
 // --- Types ---
 
 type CodeProps = HTMLAttributes<HTMLElement> & {
@@ -84,11 +85,14 @@ type AttachedFile = {
   included: boolean;
 };
 
-type FileAttachmentPart = {
-  type: 'file';
-  mediaType: string;
+type AttachmentPayload = {
+  name: string;
+  contentType: string;
   url: string;
-  filename?: string;
+};
+
+type ChatMessageWithAttachments = ChatMessage & {
+  experimental_attachments?: AttachmentPayload[];
 };
 
 
@@ -203,7 +207,6 @@ function App() {
   const [monthlyModelUsage, setMonthlyModelUsage] = useState<Record<string, UsageTotals>>(() => readMonthlyModelUsage(getMonthKey()));
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
   const [localInput, setLocalInput] = useState('');
-  const [isNewChatOpening, setIsNewChatOpening] = useState(false);
 
   // -- Derived --
   const activeChat = chats.find((chat) => chat.id === activeChatId) ?? null;
@@ -620,8 +623,6 @@ function App() {
     setLocalInput('');
     setAttachedFiles([]);
     setIsSidebarOpen(false); // Close sidebar on mobile
-    setIsNewChatOpening(true);
-    setTimeout(() => setIsNewChatOpening(false), 700);
   };
 
   const selectChat = (chatId: string) => {
@@ -843,12 +844,11 @@ function App() {
         fullText = ' '; // Space to satisfy required content
      }
      
-    const imageParts: FileAttachmentPart[] = imageFiles.map((file) => ({
-      type: 'file',
-      mediaType: file.mimeType || 'image/jpeg',
-      url: file.content,
-      filename: file.name,
-    }));
+     const imageAttachments = imageFiles.map(f => ({
+        name: f.name,
+        contentType: f.mimeType || 'image/jpeg',
+        url: f.content
+     }));
     
      lastUserMessageRef.current = fullText;
     setAttachedFiles([]);
@@ -902,10 +902,7 @@ function App() {
          const userMessage: ChatMessage = {
            id: createId(),
            role: 'user',
-           parts: [
-             { type: 'text', text: fullText },
-             ...imageParts
-           ],
+          parts: [{ type: 'text', text: fullText }],
          };
          const nextMessages = [...messages, userMessage];
          setMessages(nextMessages);
@@ -950,10 +947,11 @@ function App() {
          setMessages(finalMessages);
          syncActiveChatMessages(finalMessages);
        } else {
-        const messagePayload: ChatMessage = {
+        const messagePayload: ChatMessageWithAttachments = {
           id: createId(),
           role: 'user',
-          parts: [{ type: 'text', text: fullText }, ...imageParts],
+          parts: [{ type: 'text', text: fullText }],
+          experimental_attachments: imageAttachments,
         };
         await sendMessage(messagePayload, {
           body: {
@@ -1111,7 +1109,7 @@ function App() {
       {/* --- Chat Area --- */}
       <main 
         ref={messagesContainerRef}
-        className={cn("flex-1 overflow-y-auto p-4 space-y-6 scroll-smooth", isNewChatOpening && "animate-in slide-in-from-right-4 fade-in duration-300")}
+        className="flex-1 overflow-y-auto p-4 space-y-6 scroll-smooth"
         onScroll={() => {
           const container = messagesContainerRef.current;
           if (!container) return;
@@ -1121,13 +1119,6 @@ function App() {
           isUserScrollingRef.current = !isNearBottom;
         }}
       >
-        {isNewChatOpening && (
-          <div className="flex justify-center">
-            <div className="px-3 py-1 text-xs rounded-full bg-primary text-primary-foreground shadow-sm animate-in fade-in slide-in-from-top-2">
-              Nowy chat
-            </div>
-          </div>
-        )}
         {visibleMessages.length === 0 ? (
           <ChatEmptyState />
         ) : (
@@ -1187,16 +1178,6 @@ function App() {
                             >
                               {part.text}
                             </ReactMarkdown>
-                          )}
-                          {part.type === 'file' && part.mediaType.startsWith('image/') && (
-                            <div className="my-2 rounded-lg overflow-hidden border border-border/50 bg-secondary/20">
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img 
-                                src={part.url} 
-                                alt={part.filename || 'Załącznik'} 
-                                className="max-w-full h-auto object-contain max-h-[400px]" 
-                              />
-                            </div>
                           )}
                         </div>
                       ))
