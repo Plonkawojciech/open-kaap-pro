@@ -949,7 +949,7 @@ function App() {
        } else {
         const messagePayload: ChatMessageWithAttachments = {
           role: 'user',
-          content: fullText,
+          parts: [{ type: 'text', text: fullText }],
           experimental_attachments: imageAttachments,
         };
         await sendMessage(messagePayload, {
