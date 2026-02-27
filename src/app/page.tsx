@@ -200,6 +200,8 @@ function App() {
   // Message Editing / Copying
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [expandedErrorIds, setExpandedErrorIds] = useState<string[]>([]);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState('');
 
   // Usage & Files
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
@@ -339,7 +341,7 @@ function App() {
         writeAuditLog(next);
         return next;
       });
-      setMessages((prev: ChatMessage[]) => {
+      setMessages(() => {
         const nextMessages: ChatMessage[] = [
           ...prev,
           {
@@ -785,7 +787,7 @@ function App() {
       if (data.multiModeModels) setMultiModeModels(data.multiModeModels);
       if (data.auditLog) setAuditLog(data.auditLog);
     } catch {
-      setMessages((prev: ChatMessage[]) => {
+      setMessages(() => {
         const nextMessages: ChatMessage[] = [
           ...prev,
           {
@@ -878,7 +880,7 @@ function App() {
     const perModelLimit = budgetSettings.perModelLimitUSD[selectedModel];
     const perModelCost = monthlyModelUsage[selectedModel]?.costUSD ?? 0;
     if (overBudget || (perModelLimit && perModelCost >= perModelLimit)) {
-      setMessages((prev: ChatMessage[]) => {
+      setMessages(() => {
         const nextMessages: ChatMessage[] = [
           ...prev,
           {
@@ -977,7 +979,7 @@ function App() {
        const rawMessage = err instanceof Error ? err.message : '';
        const matched = mapError(rawMessage);
        const provider = detectProvider(selectedModel);
-      setMessages((prev: ChatMessage[]) => {
+      setMessages(() => {
         const nextMessages: ChatMessage[] = [
           ...prev,
           {
@@ -999,6 +1001,170 @@ function App() {
         return nextMessages;
       });
      }
+  };
+
+  const removePrompt = (messageId: string) => {
+    const index = messages.findIndex((msg) => msg.id === messageId);
+    if (index === -1) return;
+    let end = index + 1;
+    while (end < messages.length && messages[end].role !== 'user') {
+      end += 1;
+    }
+    const nextMessages = [...messages.slice(0, index), ...messages.slice(end)];
+    setMessages(nextMessages);
+    syncActiveChatMessages(nextMessages);
+  };
+
+  const resendEditedPrompt = async (messageId: string, text: string) => {
+    if (status === 'streaming') return;
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    const index = messages.findIndex((msg) => msg.id === messageId);
+    if (index === -1) return;
+    const baseMessages = messages.slice(0, index);
+    setMessages(baseMessages);
+    syncActiveChatMessages(baseMessages);
+    setEditingMessageId(null);
+    setEditingText('');
+    lastUserMessageRef.current = trimmed;
+
+    const modelProfile = modelProfiles[selectedModel] ?? {};
+    const modeTemperatureMap: Record<string, number> = {
+      szybki: 0.3,
+      analityczny: 0.5,
+      kreatywny: 0.9,
+      oszczedny: 0.2,
+    };
+    const effectiveTemperature =
+      typeof modelProfile.temperature === 'number'
+        ? modelProfile.temperature
+        : modeTemperatureMap[workMode] ?? temperature;
+
+    const overBudget =
+      budgetSettings.monthlyBudgetUSD > 0 && monthlyUsage.costUSD >= budgetSettings.monthlyBudgetUSD;
+    const perModelLimit = budgetSettings.perModelLimitUSD[selectedModel];
+    const perModelCost = monthlyModelUsage[selectedModel]?.costUSD ?? 0;
+    if (overBudget || (perModelLimit && perModelCost >= perModelLimit)) {
+      setMessages(() => {
+        const nextMessages: ChatMessage[] = [
+          ...baseMessages,
+          {
+            id: createId(),
+            role: 'assistant',
+            parts: [
+              {
+                type: 'text',
+                text: overBudget
+                  ? '⛔ Osiągnięto miesięczny limit kosztów. Zmień limit lub odczekaj do nowego miesiąca.'
+                  : `⛔ Osiągnięto limit kosztów dla modelu ${selectedModel}. Zmień model lub zwiększ limit.`,
+              },
+            ],
+            metadata: { warning: true },
+          },
+        ];
+        syncActiveChatMessages(nextMessages);
+        return nextMessages;
+      });
+      return;
+    }
+
+    try {
+      if (multiModeEnabled && multiModeModels.length > 0) {
+        const userMessage: ChatMessage = {
+          id: createId(),
+          role: 'user',
+          parts: [{ type: 'text', text: trimmed }],
+        };
+        const nextMessages = [...baseMessages, userMessage];
+        setMessages(nextMessages);
+        syncActiveChatMessages(nextMessages);
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'multi',
+            models: [selectedModel, ...multiModeModels.filter((id) => id !== selectedModel)],
+            messages: nextMessages,
+            masterPrompt,
+            temperature: effectiveTemperature,
+            topP: modelProfile.topP,
+            modelSystemPrompts,
+            memory: activeChat?.memory,
+            pinnedFacts: activeChat?.pinnedFacts,
+            mode: workMode,
+            apiKeys,
+          }),
+        });
+        const json = await res.json();
+        const results = Array.isArray(json.results) ? json.results : [];
+        const mergedText = json.mergedText ? String(json.mergedText) : '';
+        const responseText = [
+          '### Porównanie modeli',
+          ...results.map((r: { model: string; text?: string; error?: string }) =>
+            r.text
+              ? `#### ${r.model}\n${r.text}`
+              : `#### ${r.model}\nBłąd: ${r.error || 'Nieznany błąd'}`
+          ),
+          mergedText ? `### Scalone\n${mergedText}` : '',
+        ]
+          .filter(Boolean)
+          .join('\n\n');
+        const assistantMessage: ChatMessage = {
+          id: createId(),
+          role: 'assistant',
+          parts: [{ type: 'text', text: responseText }],
+        };
+        const finalMessages = [...nextMessages, assistantMessage];
+        setMessages(finalMessages);
+        syncActiveChatMessages(finalMessages);
+      } else {
+        const messagePayload: ChatMessage = {
+          id: createId(),
+          role: 'user',
+          parts: [{ type: 'text', text: trimmed }],
+        };
+        await sendMessage(messagePayload, {
+          body: {
+            model: selectedModel,
+            masterPrompt,
+            temperature: effectiveTemperature,
+            topP: modelProfile.topP,
+            modelSystemPrompt: activeModelSystemPrompt,
+            modelSystemPrompts,
+            memory: activeChat?.memory,
+            pinnedFacts: activeChat?.pinnedFacts,
+            fallbackModels: modelProfile.fallbacks ?? [],
+            mode: workMode,
+            apiKeys,
+          },
+        });
+      }
+    } catch (err: unknown) {
+      const rawMessage = err instanceof Error ? err.message : '';
+      const matched = mapError(rawMessage);
+      const provider = detectProvider(selectedModel);
+      setMessages(() => {
+        const nextMessages: ChatMessage[] = [
+          ...baseMessages,
+          {
+            id: createId(),
+            role: 'assistant',
+            parts: [{ type: 'text', text: `⚠️ ${matched.description}\nKod: ${matched.code}` }],
+            metadata: {
+              error: true,
+              errorMessage: rawMessage || matched.description,
+              errorCode: matched.code,
+              errorDescription: matched.description,
+              attemptedText: trimmed,
+              errorModel: selectedModel,
+              errorProvider: provider,
+            },
+          },
+        ];
+        syncActiveChatMessages(nextMessages);
+        return nextMessages;
+      });
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -1081,18 +1247,6 @@ function App() {
         <div className="flex items-center gap-1">
           <div className="relative group">
             <button 
-              onClick={() => setIsSearchVisible(!isSearchVisible)}
-              className={cn("p-2 rounded-full transition-colors", isSearchVisible ? "bg-secondary" : "hover:bg-secondary")}
-              aria-label="Szukaj w czacie"
-            >
-              <Search className="w-5 h-5" />
-            </button>
-            <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1 px-2 py-0.5 text-[10px] rounded bg-background border border-border/50 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
-              Szukaj w czacie
-            </span>
-          </div>
-          <div className="relative group">
-            <button 
               onClick={() => setIsSettingsOpen(true)}
               className="p-2 hover:bg-secondary rounded-full transition-colors"
               aria-label="Ustawienia"
@@ -1165,7 +1319,14 @@ function App() {
                 )}>
                   {/* Message Content */}
                   <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-pre:my-2 prose-pre:bg-secondary/50 prose-pre:p-3 prose-pre:rounded-xl">
-                    {m.parts && m.parts.length > 0 ? (
+                    {isUser && editingMessageId === m.id ? (
+                      <textarea
+                        value={editingText}
+                        onChange={(e) => setEditingText(e.target.value)}
+                        rows={3}
+                        className="w-full bg-transparent border border-border/50 rounded-lg p-2 text-sm focus:outline-none resize-none"
+                      />
+                    ) : m.parts && m.parts.length > 0 ? (
                       m.parts.map((part, i) => (
                         <div key={i}>
                           {part.type === 'text' && (
@@ -1262,74 +1423,110 @@ function App() {
                   </div>
 
                   {/* Message Actions */}
-                  <div className={cn("flex items-center gap-3 mt-2 opacity-0 group-hover:opacity-100 transition-opacity", isUser ? "text-primary-foreground/60" : "text-muted-foreground")}>
-                    <button 
-                      onClick={() => {
-                         navigator.clipboard.writeText(displayText);
-                         setCopiedMessageId(m.id);
-                         setTimeout(() => setCopiedMessageId(null), 1500);
-                      }}
-                      className="text-[10px] hover:underline flex items-center gap-1"
-                    >
-                      {copiedMessageId === m.id ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                      {copiedMessageId === m.id ? 'Skopiowano' : 'Kopiuj'}
-                    </button>
-                    {isError && m.metadata?.attemptedText && (
-                      <button
-                        onClick={() => {
-                          const attemptedText = m.metadata?.attemptedText;
-                          if (!attemptedText || status === 'streaming') return;
-                          lastUserMessageRef.current = attemptedText;
-                          const modelProfile = modelProfiles[selectedModel] ?? {};
-                          const modeTemperatureMap: Record<string, number> = {
-                            szybki: 0.3,
-                            analityczny: 0.5,
-                            kreatywny: 0.9,
-                            oszczedny: 0.2,
-                          };
-                          const effectiveTemperature =
-                            typeof modelProfile.temperature === 'number'
-                              ? modelProfile.temperature
-                              : modeTemperatureMap[workMode] ?? temperature;
-                          sendMessage(
-                            { text: attemptedText },
-                            {
-                              body: {
-                                model: selectedModel,
-                                masterPrompt,
-                                temperature: effectiveTemperature,
-                                topP: modelProfile.topP,
-                                modelSystemPrompt: activeModelSystemPrompt,
-                                modelSystemPrompts,
-                                memory: activeChat?.memory,
-                                pinnedFacts: activeChat?.pinnedFacts,
-                                fallbackModels: modelProfile.fallbacks ?? [],
-                                mode: workMode,
-                                apiKeys,
-                              },
-                            }
-                          );
-                        }}
-                        className="text-[10px] hover:underline flex items-center gap-1"
-                      >
-                        <ArrowUp className="w-3 h-3" />
-                        Ponów
-                      </button>
-                    )}
-                    {isUser && (
-                      <button 
-                        onClick={() => {
-                          // Ideally open a modal or replace content inline. For simplicity, just populate input?
-                          // Let's populate the main input for now as a "quote/edit" behavior or separate mode.
-                          // Actually, let's keep it simple: populate main input
-                          setLocalInput(displayText);
-                          if(textareaRef.current) textareaRef.current.focus();
-                        }}
-                        className="text-[10px] hover:underline flex items-center gap-1"
-                      >
-                        <Edit2 className="w-3 h-3" />
-                        Edytuj
-                      </button>
+                  <div className={cn("flex items-center gap-2 mt-2", isUser ? "text-primary-foreground/70" : "text-muted-foreground")}>
+                    {isUser && editingMessageId === m.id ? (
+                      <>
+                        <button
+                          onClick={() => resendEditedPrompt(m.id, editingText)}
+                          className="p-1 rounded-full bg-secondary/30 hover:bg-secondary/60 transition-colors"
+                          aria-label="Zapisz i wyślij"
+                          title="Zapisz i wyślij"
+                        >
+                          <ArrowUp className="w-3 h-3" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            setEditingMessageId(null);
+                            setEditingText('');
+                          }}
+                          className="p-1 rounded-full bg-secondary/30 hover:bg-secondary/60 transition-colors"
+                          aria-label="Anuluj"
+                          title="Anuluj"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button 
+                          onClick={() => {
+                            navigator.clipboard.writeText(displayText);
+                            setCopiedMessageId(m.id);
+                            setTimeout(() => setCopiedMessageId(null), 1500);
+                          }}
+                          className="p-1 rounded-full bg-secondary/30 hover:bg-secondary/60 transition-colors"
+                          aria-label={copiedMessageId === m.id ? 'Skopiowano' : isUser ? 'Kopiuj prompt' : 'Kopiuj odpowiedź'}
+                          title={copiedMessageId === m.id ? 'Skopiowano' : isUser ? 'Kopiuj prompt' : 'Kopiuj odpowiedź'}
+                        >
+                          {copiedMessageId === m.id ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                        </button>
+                        {isError && m.metadata?.attemptedText && (
+                          <button
+                            onClick={() => {
+                              const attemptedText = m.metadata?.attemptedText;
+                              if (!attemptedText || status === 'streaming') return;
+                              lastUserMessageRef.current = attemptedText;
+                              const modelProfile = modelProfiles[selectedModel] ?? {};
+                              const modeTemperatureMap: Record<string, number> = {
+                                szybki: 0.3,
+                                analityczny: 0.5,
+                                kreatywny: 0.9,
+                                oszczedny: 0.2,
+                              };
+                              const effectiveTemperature =
+                                typeof modelProfile.temperature === 'number'
+                                  ? modelProfile.temperature
+                                  : modeTemperatureMap[workMode] ?? temperature;
+                              sendMessage(
+                                { text: attemptedText },
+                                {
+                                  body: {
+                                    model: selectedModel,
+                                    masterPrompt,
+                                    temperature: effectiveTemperature,
+                                    topP: modelProfile.topP,
+                                    modelSystemPrompt: activeModelSystemPrompt,
+                                    modelSystemPrompts,
+                                    memory: activeChat?.memory,
+                                    pinnedFacts: activeChat?.pinnedFacts,
+                                    fallbackModels: modelProfile.fallbacks ?? [],
+                                    mode: workMode,
+                                    apiKeys,
+                                  },
+                                }
+                              );
+                            }}
+                            className="p-1 rounded-full bg-secondary/30 hover:bg-secondary/60 transition-colors"
+                            aria-label="Ponów"
+                            title="Ponów"
+                          >
+                            <ArrowUp className="w-3 h-3" />
+                          </button>
+                        )}
+                        {isUser && (
+                          <>
+                            <button 
+                              onClick={() => {
+                                setEditingMessageId(m.id);
+                                setEditingText(displayText);
+                              }}
+                              className="p-1 rounded-full bg-secondary/30 hover:bg-secondary/60 transition-colors"
+                              aria-label="Edytuj prompt"
+                              title="Edytuj prompt"
+                            >
+                              <Edit2 className="w-3 h-3" />
+                            </button>
+                            <button 
+                              onClick={() => removePrompt(m.id)}
+                              className="p-1 rounded-full bg-secondary/30 hover:bg-secondary/60 transition-colors"
+                              aria-label="Usuń prompt"
+                              title="Usuń prompt"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>
@@ -1487,6 +1684,19 @@ function App() {
             </button>
             <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-0.5 text-[10px] rounded bg-background border border-border/50 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
               {status === 'streaming' ? "Zatrzymaj" : "Wyślij"}
+            </span>
+          </div>
+          <div className="relative group">
+            <button
+              type="button"
+              onClick={() => setIsSearchVisible(!isSearchVisible)}
+              className={cn("p-3 rounded-full transition-all shrink-0", isSearchVisible ? "bg-secondary" : "hover:bg-secondary")}
+              aria-label="Szukaj w czacie"
+            >
+              <Search className="w-5 h-5" />
+            </button>
+            <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-0.5 text-[10px] rounded bg-background border border-border/50 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
+              Szukaj w czacie
             </span>
           </div>
         </form>
