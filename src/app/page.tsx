@@ -115,6 +115,7 @@ function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false); // Settings modal
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchVisible, setIsSearchVisible] = useState(false);
+  const [isNewChatOpening, setIsNewChatOpening] = useState(false);
   const [newChatName, setNewChatName] = useState('');
   const [newChatFolderId, setNewChatFolderId] = useState<string>('none');
   const [newFolderName, setNewFolderName] = useState('');
@@ -609,6 +610,8 @@ function App() {
   };
 
   const createChat = (folderId: string | null = null, name?: string) => {
+    if (isNewChatOpening) return;
+    setIsNewChatOpening(true);
     const trimmedName = name?.trim();
     const newChat: ChatSession = {
       id: createId(),
@@ -623,6 +626,7 @@ function App() {
     setLocalInput('');
     setAttachedFiles([]);
     setIsSidebarOpen(false); // Close sidebar on mobile
+    setTimeout(() => setIsNewChatOpening(false), 0);
   };
 
   const selectChat = (chatId: string) => {
@@ -1056,45 +1060,33 @@ function App() {
         </div>
         
         <div className="flex items-center gap-1">
-          <div className="relative group">
-            <button 
-              onClick={() => setIsSearchVisible(!isSearchVisible)}
-              className={cn("p-2 rounded-full transition-colors", isSearchVisible ? "bg-secondary" : "hover:bg-secondary")}
-              aria-label="Szukaj w czacie"
-            >
-              <Search className="w-5 h-5" />
-            </button>
-            <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1 px-2 py-0.5 text-[10px] rounded bg-background border border-border/50 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
-              Szukaj w czacie
-            </span>
-          </div>
-          <div className="relative group">
-            <button 
-              onClick={() => setIsSettingsOpen(true)}
-              className="p-2 hover:bg-secondary rounded-full transition-colors"
-              aria-label="Ustawienia"
-            >
-              <Settings className="w-5 h-5" />
-            </button>
-            <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1 px-2 py-0.5 text-[10px] rounded bg-background border border-border/50 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
-              Ustawienia
-            </span>
-          </div>
-          <div className="relative group">
-            <button 
-              onClick={() => createChat()}
-              className="p-2 hover:bg-secondary rounded-full transition-colors text-primary"
-              aria-label="Nowy chat"
-            >
-              <Plus className="w-5 h-5" />
-            </button>
-            {isNewChatOpening && (
-              <span className="absolute -top-1 -right-1 h-6 w-6 rounded-full bg-primary/40 animate-ping" />
-            )}
-            <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1 px-2 py-0.5 text-[10px] rounded bg-background border border-border/50 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
-              Nowy chat
-            </span>
-          </div>
+          <button 
+            onClick={() => setIsSearchVisible(!isSearchVisible)}
+            className={cn("p-2 rounded-full transition-colors", isSearchVisible ? "bg-secondary" : "hover:bg-secondary")}
+            title="Szukaj"
+          >
+            <Search className="w-5 h-5" />
+          </button>
+          <button 
+            onClick={() => setIsSettingsOpen(true)}
+            className="p-2 hover:bg-secondary rounded-full transition-colors"
+            title="Edytuj Prompt / Ustawienia"
+          >
+            <Edit2 className="w-5 h-5" />
+          </button>
+          <button 
+            onClick={() => setIsSettingsOpen(true)}
+            className="p-2 hover:bg-secondary rounded-full transition-colors"
+          >
+            <Settings className="w-5 h-5" />
+          </button>
+          <button 
+            onClick={() => createChat()}
+            disabled={isNewChatOpening}
+            className="p-2 hover:bg-secondary rounded-full transition-colors text-primary disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            <Plus className="w-5 h-5" />
+          </button>
         </div>
       </header>
 
