@@ -1028,7 +1028,7 @@ function App() {
             <button 
               onClick={() => setIsSidebarOpen(true)}
               className="p-2 -ml-2 hover:bg-secondary rounded-full transition-colors"
-              title="Twoje czaty"
+              aria-label="Twoje czaty"
             >
               <Menu className="w-5 h-5" />
             </button>
@@ -1041,7 +1041,7 @@ function App() {
               <h1 className="text-sm font-bold leading-tight">Open Kaap Pro</h1>
               <button
                 onClick={() => setIsSettingsOpen(true)}
-                title="Zobacz statystyki miesiąca"
+                aria-label="Zobacz statystyki miesiąca"
                 className="flex items-center gap-1.5 text-[10px] bg-secondary/50 px-1.5 py-0.5 rounded-md text-muted-foreground font-mono hover:bg-secondary"
               >
                 <span className="uppercase">{monthLabel}</span>
@@ -1062,7 +1062,7 @@ function App() {
             <button 
               onClick={() => setIsSearchVisible(!isSearchVisible)}
               className={cn("p-2 rounded-full transition-colors", isSearchVisible ? "bg-secondary" : "hover:bg-secondary")}
-              title="Szukaj w czacie"
+              aria-label="Szukaj w czacie"
             >
               <Search className="w-5 h-5" />
             </button>
@@ -1074,7 +1074,7 @@ function App() {
             <button 
               onClick={() => setIsSettingsOpen(true)}
               className="p-2 hover:bg-secondary rounded-full transition-colors"
-              title="Ustawienia"
+              aria-label="Ustawienia"
             >
               <Settings className="w-5 h-5" />
             </button>
@@ -1086,10 +1086,13 @@ function App() {
             <button 
               onClick={() => createChat()}
               className="p-2 hover:bg-secondary rounded-full transition-colors text-primary"
-              title="Nowy chat"
+              aria-label="Nowy chat"
             >
               <Plus className="w-5 h-5" />
             </button>
+            {isNewChatOpening && (
+              <span className="absolute -top-1 -right-1 h-6 w-6 rounded-full bg-primary/40 animate-ping" />
+            )}
             <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1 px-2 py-0.5 text-[10px] rounded bg-background border border-border/50 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
               Nowy chat
             </span>
