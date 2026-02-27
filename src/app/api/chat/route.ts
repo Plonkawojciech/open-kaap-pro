@@ -236,7 +236,7 @@ export async function POST(req: Request) {
         prompt: 'ping',
         system: systemInstruction,
         temperature: 0,
-        maxTokens: modelConfig?.maxOutputTokens,
+        maxOutputTokens: modelConfig?.maxOutputTokens,
       });
       return Response.json({ ok: true, model: selectedModel, text: result.text });
     }
@@ -266,7 +266,7 @@ export async function POST(req: Request) {
             system: systemInstruction,
             temperature: typeof temperature === 'number' ? temperature : undefined,
             topP: typeof topP === 'number' ? topP : undefined,
-            maxTokens: candidateConfig?.maxOutputTokens,
+            maxOutputTokens: candidateConfig?.maxOutputTokens,
           });
           results.push({ model: candidate, text: response.text, usage: response.usage ?? null });
         } catch (err) {
@@ -295,7 +295,7 @@ export async function POST(req: Request) {
           system: systemInstruction,
           temperature: typeof temperature === 'number' ? temperature : undefined,
           topP: typeof topP === 'number' ? topP : undefined,
-          maxTokens: mergeConfig?.maxOutputTokens,
+          maxOutputTokens: mergeConfig?.maxOutputTokens,
         });
         mergedText = merged.text;
       } catch (err) {
@@ -327,7 +327,7 @@ export async function POST(req: Request) {
           system: systemInstruction,
           temperature: typeof temperature === 'number' ? temperature : undefined,
           topP: typeof topP === 'number' ? topP : undefined,
-          maxTokens: candidateConfig?.maxOutputTokens,
+          maxOutputTokens: candidateConfig?.maxOutputTokens,
         });
         return result.toUIMessageStreamResponse({
           originalMessages: messages,
