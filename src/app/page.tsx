@@ -626,7 +626,7 @@ function App() {
     setLocalInput('');
     setAttachedFiles([]);
     setIsSidebarOpen(false); // Close sidebar on mobile
-    setTimeout(() => setIsNewChatOpening(false), 0);
+    setTimeout(() => setIsNewChatOpening(false), 1200);
   };
 
   const selectChat = (chatId: string) => {
@@ -1021,7 +1021,26 @@ function App() {
   // -- Render --
 
   return (
-    <div className="flex flex-col h-[100dvh] bg-background text-foreground font-sans overflow-hidden">
+    <div className="relative flex flex-col h-[100dvh] bg-background text-foreground font-sans overflow-hidden">
+      {isNewChatOpening && (
+        <div className="pointer-events-none absolute inset-0 z-50">
+          <div className="absolute inset-0 bg-primary/5" />
+          <div
+            className="absolute left-[50%] top-[31vh] h-6 w-6 -translate-x-1/2 rounded-full border-2 border-primary/80"
+            style={{ animation: 'newChatRipple 1200ms cubic-bezier(0.16, 1, 0.3, 1)' }}
+          />
+          <div
+            className="absolute left-[50%] top-[31vh] h-6 w-6 -translate-x-1/2 rounded-full border-2 border-primary/60"
+            style={{ animation: 'newChatRipple 1400ms cubic-bezier(0.16, 1, 0.3, 1) 140ms' }}
+          />
+        </div>
+      )}
+      <style jsx global>{`
+        @keyframes newChatRipple {
+          0% { transform: translateX(-50%) scale(0.05); opacity: 0.95; }
+          100% { transform: translateX(-50%) scale(20); opacity: 0; }
+        }
+      `}</style>
       
       {/* --- Mobile Header --- */}
       <header className="flex items-center justify-between px-4 py-3 border-b border-border/40 bg-background/80 backdrop-blur-md sticky top-0 z-40 shrink-0">
@@ -1060,33 +1079,43 @@ function App() {
         </div>
         
         <div className="flex items-center gap-1">
-          <button 
-            onClick={() => setIsSearchVisible(!isSearchVisible)}
-            className={cn("p-2 rounded-full transition-colors", isSearchVisible ? "bg-secondary" : "hover:bg-secondary")}
-            title="Szukaj"
-          >
-            <Search className="w-5 h-5" />
-          </button>
-          <button 
-            onClick={() => setIsSettingsOpen(true)}
-            className="p-2 hover:bg-secondary rounded-full transition-colors"
-            title="Edytuj Prompt / Ustawienia"
-          >
-            <Edit2 className="w-5 h-5" />
-          </button>
-          <button 
-            onClick={() => setIsSettingsOpen(true)}
-            className="p-2 hover:bg-secondary rounded-full transition-colors"
-          >
-            <Settings className="w-5 h-5" />
-          </button>
-          <button 
-            onClick={() => createChat()}
-            disabled={isNewChatOpening}
-            className="p-2 hover:bg-secondary rounded-full transition-colors text-primary disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            <Plus className="w-5 h-5" />
-          </button>
+          <div className="relative group">
+            <button 
+              onClick={() => setIsSearchVisible(!isSearchVisible)}
+              className={cn("p-2 rounded-full transition-colors", isSearchVisible ? "bg-secondary" : "hover:bg-secondary")}
+              aria-label="Szukaj w czacie"
+            >
+              <Search className="w-5 h-5" />
+            </button>
+            <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1 px-2 py-0.5 text-[10px] rounded bg-background border border-border/50 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
+              Szukaj w czacie
+            </span>
+          </div>
+          <div className="relative group">
+            <button 
+              onClick={() => setIsSettingsOpen(true)}
+              className="p-2 hover:bg-secondary rounded-full transition-colors"
+              aria-label="Ustawienia"
+            >
+              <Settings className="w-5 h-5" />
+            </button>
+            <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1 px-2 py-0.5 text-[10px] rounded bg-background border border-border/50 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
+              Ustawienia
+            </span>
+          </div>
+          <div className="relative group">
+            <button 
+              onClick={() => createChat()}
+              disabled={isNewChatOpening}
+              className="p-2 hover:bg-secondary rounded-full transition-colors text-primary disabled:opacity-60 disabled:cursor-not-allowed"
+              aria-label="Nowy chat"
+            >
+              <Plus className="w-5 h-5" />
+            </button>
+            <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1 px-2 py-0.5 text-[10px] rounded bg-background border border-border/50 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
+              Nowy chat
+            </span>
+          </div>
         </div>
       </header>
 
@@ -1326,20 +1355,26 @@ function App() {
       <div className="p-3 bg-background/80 backdrop-blur-md border-t border-border/40 shrink-0">
         <form onSubmit={handleSubmit} className="max-w-4xl mx-auto relative flex items-end gap-2">
           
-          <button
-            type="button"
-            className="p-3 text-muted-foreground hover:bg-secondary rounded-full transition-colors shrink-0"
-            onClick={() => document.getElementById('file-upload')?.click()}
-          >
-            <Paperclip className="w-5 h-5" />
-            <input 
-              id="file-upload" 
-              type="file" 
-              multiple 
-              className="hidden" 
-              onChange={(e) => handleFilesChange(e.target.files)}
-            />
-          </button>
+          <div className="relative group">
+            <button
+              type="button"
+              className="p-3 text-muted-foreground hover:bg-secondary rounded-full transition-colors shrink-0"
+              onClick={() => document.getElementById('file-upload')?.click()}
+              aria-label="Dodaj załącznik"
+            >
+              <Paperclip className="w-5 h-5" />
+              <input 
+                id="file-upload" 
+                type="file" 
+                multiple 
+                className="hidden" 
+                onChange={(e) => handleFilesChange(e.target.files)}
+              />
+            </button>
+            <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-0.5 text-[10px] rounded bg-background border border-border/50 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
+              Dodaj załącznik
+            </span>
+          </div>
 
           <div className="flex-1 bg-secondary/50 rounded-3xl border border-transparent focus-within:border-primary/20 focus-within:bg-background transition-all flex flex-col min-h-[48px]">
             {attachedFiles.length > 0 && (
@@ -1431,23 +1466,29 @@ function App() {
             />
           </div>
 
-          <button
-            type="submit"
-            className={cn(
-              "p-3 rounded-full transition-all shrink-0 shadow-sm",
-              (status === 'streaming')
-                ? "bg-destructive text-destructive-foreground hover:opacity-90 shadow-md"
-                : ((safeInput.trim()) || attachedFiles.length > 0)
-                  ? "bg-primary text-primary-foreground hover:opacity-90 shadow-md"
-                   : "bg-secondary text-muted-foreground hover:bg-secondary/80"
-            )}
-          >
-            {status === 'streaming' ? (
-               <div className="w-3 h-3 bg-current rounded-sm" />
-            ) : (
-              <ArrowUp className="w-5 h-5" />
-            )}
-          </button>
+          <div className="relative group">
+            <button
+              type="submit"
+              className={cn(
+                "p-3 rounded-full transition-all shrink-0 shadow-sm",
+                (status === 'streaming')
+                  ? "bg-destructive text-destructive-foreground hover:opacity-90 shadow-md"
+                  : ((safeInput.trim()) || attachedFiles.length > 0)
+                    ? "bg-primary text-primary-foreground hover:opacity-90 shadow-md"
+                     : "bg-secondary text-muted-foreground hover:bg-secondary/80"
+              )}
+              aria-label={status === 'streaming' ? "Zatrzymaj" : "Wyślij"}
+            >
+              {status === 'streaming' ? (
+                 <div className="w-3 h-3 bg-current rounded-sm" />
+              ) : (
+                <ArrowUp className="w-5 h-5" />
+              )}
+            </button>
+            <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-0.5 text-[10px] rounded bg-background border border-border/50 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
+              {status === 'streaming' ? "Zatrzymaj" : "Wyślij"}
+            </span>
+          </div>
         </form>
         <div className="text-[10px] text-center text-muted-foreground mt-2 opacity-60">
            Koszt ost. zapytania: {lastPromptCostPLN.toFixed(2)} PLN
