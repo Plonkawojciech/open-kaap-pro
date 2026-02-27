@@ -902,10 +902,7 @@ function App() {
          const userMessage: ChatMessage = {
            id: createId(),
            role: 'user',
-           parts: [
-             { type: 'text', text: fullText },
-             ...imageAttachments.map(img => ({ type: 'image' as const, image: img.url, mimeType: img.contentType }))
-           ],
+          parts: [{ type: 'text', text: fullText }],
          };
          const nextMessages = [...messages, userMessage];
          setMessages(nextMessages);
