@@ -7,7 +7,8 @@ import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { ArrowUp, Menu, Plus, Settings, Paperclip, X, Copy, Check, Edit2, Search } from 'lucide-react';
+import { ArrowUp, Menu, Plus, Settings, Paperclip, X, Copy, Check, Edit2, Search, Sun, Moon } from 'lucide-react';
+import { useTheme } from 'next-themes';
 import { AVAILABLE_MODELS, DEFAULT_MODEL, USD_TO_PLN, type ModelConfig } from '@/lib/constants';
 import { messageMetadataSchema, type ChatMessage } from '@/lib/chat-types';
 import { cn } from '@/lib/utils';
@@ -108,6 +109,7 @@ function App() {
   const lastFilesRef = useRef<AttachedFile[]>([]);
 
   const chatTransport = useMemo(() => new DefaultChatTransport({ api: '/api/chat' }), []);
+  const { resolvedTheme, setTheme } = useTheme();
 
   // -- State --
   // UI State
@@ -1183,6 +1185,7 @@ function App() {
 
   const isLoading = status === 'streaming' || status === 'submitted';
   const lastPromptCostPLN = lastUsage.costUSD * USD_TO_PLN;
+  const isDark = resolvedTheme === 'dark';
 
   // -- Render --
 
@@ -1245,6 +1248,18 @@ function App() {
         </div>
         
         <div className="flex items-center gap-1">
+          <div className="relative group">
+            <button 
+              onClick={() => setTheme(isDark ? 'light' : 'dark')}
+              className="p-2 hover:bg-secondary rounded-full transition-colors"
+              aria-label={isDark ? "Tryb jasny" : "Tryb ciemny"}
+            >
+              {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            </button>
+            <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1 px-2 py-0.5 text-[10px] rounded bg-background border border-border/50 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
+              {isDark ? "Tryb jasny" : "Tryb ciemny"}
+            </span>
+          </div>
           <div className="relative group">
             <button 
               onClick={() => setIsSettingsOpen(true)}
